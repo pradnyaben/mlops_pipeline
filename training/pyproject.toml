@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ml_pipelines"
+version = "0.0.1"  # Update this with your version
+description = "ml pipelines - template package"
+authors = [
+    {name = "Pradnya Benke", email = "pradnya.benke@cognizant.com"},
+]
+readme = "README.md"
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Natural Language :: English",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+]
+dependencies = [
+    "sagemaker==2.232.0",
+]
+
+[project.scripts]
+get-pipeline-definition = "pipelines.get_pipeline_definition:main"
+run-pipeline = "ml_pipelines.run_pipeline:main"
+
+[tool.setuptools.packages.find]
+include = ["ml_pipelines*"]  # adjust this to match your package structure

@@ -1,0 +1,18 @@
+venv
+# Files
+*.DS_Store
+*.swp
+.coverage
+.pytest_cache
+__pycache__
+package-lock.json
+Pipfile.lock
+inference_pipeline_definition.json
+
+# Folders
+*.ipynb_checkpoints/
+*.egg-info/
+*.venv/
+build/
+cdk.out/
+node_modules/

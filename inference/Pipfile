@@ -1,0 +1,15 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+boto3 = "==1.35.41"
+joblib = "==1.4.2"
+sagemaker = "==2.232.0"
+
+[dev-packages]
+sagemaker = "==2.232.0"
+
+[requires]
+python_version = "3.11"

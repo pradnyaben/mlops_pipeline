@@ -1,0 +1,195 @@
+image: python:3.11
+
+variables:
+  AWS_DEFAULT_REGION: us-west-2
+  GITLAB_OIDC_TOKEN: ${GITLAB_OIDC_TOKEN}  
+  PIP_URL: https://pypi.org/simple
+  NPM_URL: https://registry.npmjs.org/
+  HTTP_PROXY: $CODE_PROXY
+  HTTPS_PROXY: $CODE_PROXY
+  NO_PROXY: "127.0.0.1,\
+    localhost,\
+    .cognizant.com,\
+    .cognizant.io,\
+    *.amazonaws.com,\
+    s3.us-west-2.amazonaws.com"
+  no_proxy: "127.0.0.1,\
+    localhost,\
+    .cognizant.com,\
+    .cognizant.io,\
+    *.amazonaws.com,\
+    s3.us-west-2.amazonaws.com"
+
+
+before_script:
+  # - mkdir -p ~/.aws
+  # - echo "${CI_JOB_JWT_V2}" > /tmp/web_identity_token
+  # - echo -e "[profile oidc]\nrole_arn=${AWS_ROLE_ARN}\nweb_identity_token_file=/tmp/web_identity_token" > ~/.aws/config
+  # Prepare default image and add installers
+  - no_proxy="127.0.0.1,localhost,.cognizant.de,.cognizant.net,"
+  - no_proxy="${no_proxy}.cognizant.com,.cognizant.io,s3.us-west-2.amazonaws.com"
+  - export no_proxy
+  - export http_proxy=$HTTP_PROXY
+  - export https_proxy=$HTTPS_PROXY
+  - apt-get update && apt-get install -y python3 python3-pip  # Install Python and pip
+  - apt-get update && apt-get install -y awscli
+  - chmod +x ./scripts/install.sh
+  - chmod +x ./scripts/linting.sh
+  - chmod +x ./scripts/security.sh
+  - chmod +x ./scripts/unittest.sh
+  - chmod +x ./scripts/training.sh
+  - chmod +x ./scripts/inference.sh
+  - chmod +x ./scripts/functions.sh
+  - chmod +x ./scripts/build.sh
+
+
+# assume role:
+#   id_tokens:
+#     CI_JOB_JWT_V2:
+#       aud: https://gitlab.com
+#   script:
+#     - >
+#       export $(printf "AWS_ACCESS_KEY_ID=%s AWS_SECRET_ACCESS_KEY=%s AWS_SESSION_TOKEN=%s"
+#       $(aws sts assume-role-with-web-identity
+#       --role-arn ${AWS_ROLE_ARN}
+#       --role-session-name "GitLab-OIDC-Session"
+#       --web-identity-token ${CI_JOB_JWT_V2}
+#       --duration-seconds 3600
+#       --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]'
+#       --output text))
+#     - aws sts get-caller-identity
+job_needing_oidc_auth:
+  id_tokens:
+    OIDC_TOKEN:
+      aud: https://oidc.provider.com
+  script:
+    - echo $OIDC_TOKEN
+    
+
+.auth:
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: https://gitlab.com
+  script:
+    - |
+      export $(aws sts assume-role-with-web-identity \
+      --duration-seconds 900 \
+      --role-session-name "cicd" \
+      --role-arn ${AWS_ROLE_ARN} \
+      --web-identity-token "${GITLAB_OIDC_TOKEN}" \
+      --query "Credentials.{AWS_ACCESS_KEY_ID: AccessKeyId, AWS_SECRET_ACCESS_KEY: SecretAccessKey, AWS_SESSION_TOKEN: SessionToken}" \
+      --output json \
+      | tr -d '{},"' | sed -e 's#: #=#')
+
+
+assume role:
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: https://gitlab.com
+  script:
+    - echo "Exporting GITLAB_OIDC_TOKEN"
+    - export GITLAB_OIDC_TOKEN=${GITLAB_OIDC_TOKEN}
+    - >
+      export $(printf "AWS_ACCESS_KEY_ID=%s AWS_SECRET_ACCESS_KEY=%s AWS_SESSION_TOKEN=%s"
+      $(aws sts assume-role-with-web-identity
+      --role-arn ${AWS_ROLE_ARN}
+      --role-session-name "GitLab-Session"
+      --web-identity-token ${GITLAB_OIDC_TOKEN}
+      --duration-seconds 3600
+      --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]'
+      --output text))
+    - aws sts get-caller-identity
+
+.install: &install
+  - echo "Install package managers"
+  - apt-get update && apt-get install -y gzip tar
+  - pip3 install pipenv --break-system-packages
+
+
+stages:
+  - test
+  - experiment
+  - inference
+
+# # # #### Initial stage to test the code ####
+
+build:
+  stage: test
+  script:
+    - *install
+    - echo "Install packages"
+    - ./scripts/install.sh
+
+lint_python:
+  stage: test
+  script:
+    - *install
+    - echo "Install packages"
+    - ./scripts/install.sh
+    - echo "Lint the project"
+    - ./scripts/linting.sh
+
+security:
+  stage: test
+  script:
+    - *install
+    - echo "Install packages"
+    - ./scripts/install.sh
+    - echo "Lint the project"
+    - ./scripts/security.sh
+
+unit-test_python:
+  stage: test
+  script:
+    - *install
+    - echo "Install packages"
+    - ./scripts/install.sh
+    - echo "Unit tests"
+    - ./scripts/unittest.sh
+  allow_failure: # the job status will be "passed with warning", instead of "failed"
+    exit_codes:
+      - 1 # unittest.sh has failing unit test OR average test coverage is < treshold
+
+#### Experiment stage, only for training model execution ####
+experiment:
+  # Works for exp/* (experimental branch)
+  only:
+    - /^exp\/.*$/
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: https://gitlab.com
+  stage: experiment
+  script:
+    - *install
+    - echo "Install packages"
+    - ./scripts/install.sh
+    - echo "Exporting GITLAB_OIDC_TOKEN"
+    - export GITLAB_OIDC_TOKEN=${GITLAB_OIDC_TOKEN}
+    - >
+      export $(printf "AWS_ACCESS_KEY_ID=%s AWS_SECRET_ACCESS_KEY=%s AWS_SESSION_TOKEN=%s"
+      $(aws sts assume-role-with-web-identity
+      --role-arn ${AWS_ROLE_ARN}
+      --role-session-name "GitLab-Session"
+      --web-identity-token ${GITLAB_OIDC_TOKEN}
+      --duration-seconds 3600
+      --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]'
+      --output text))
+    - aws sts get-caller-identity
+    #- !reference [.auth, script]
+    - echo "Execute an experiment in the SageMaker"
+    - ./scripts/training.sh
+
+
+#### Inference ####
+inference-dev:
+  only:
+    - dev
+  stage: inference
+  variables:
+    TARGET_ENV: dev
+  script:
+    - *install
+    - echo "Install packages"
+    - ./scripts/install.sh
+    - echo "Execute Inference"
+    - ./scripts/inference.sh

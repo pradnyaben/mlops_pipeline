@@ -1,0 +1,18 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+ml-pipelines = {editable = true, path = "."}
+joblib = "==1.4.2"
+sagemaker = "==2.232.0"
+scikit_learn = "==1.2.2"
+boto3 = "*"
+
+[dev-packages]
+sagemaker = "==2.232.0"
+ml-pipelines = {editable = true, path = "."}
+
+[requires]
+python_version = "3.11"
